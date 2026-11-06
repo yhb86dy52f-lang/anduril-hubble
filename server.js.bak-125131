@@ -1,0 +1,175 @@
+const path = require('path');
+const fs = require('fs');
+const Fastify = require('fastify');
+function safeRequire(p) { const m = require(p); return m.default || m; }
+const cors = safeRequire('@fastify/cors');
+const websocket = safeRequire('@fastify/websocket');
+const statik = safeRequire('@fastify/static');
+const gpsModule = safeRequire('./gps_router');
+const gpsRoutes = gpsModule.gpsRoutes || gpsModule.default || gpsModule;
+const wsBroadcast = safeRequire('./ws-broadcast');
+const API_KEY = process.env.API_KEY || '';
+const PORT = Number(process.env.PORT || 3100);
+const HOST = process.env.HOST || '0.0.0.0';
+async function build() {
+  const fastify = Fastify({ logger: true });
+  await fastify.register(cors, { origin: true });
+  await fastify.register(websocket);
+  fastify.addHook('onRequest', async (req, reply) => {
+    const url = req.url || '';
+    if (url.startsWith('/api/')) {
+      const key = req.headers['x-api-key'];
+      if (API_KEY && key !== API_KEY) { reply.code(401).send({ ok: false, error: 'unauthorized' }); return; }
+    }
+  });
+  fastify.get('/ws', { websocket: true }, (connection, req) => {
+    const socket = connection.socket || connection;
+    try { wsBroadcast.addSocket(socket); } catch (e) {}
+    try { socket.send(JSON.stringify({ type: 'hello', msg: 'conectado a NEXUS-SENTINEL' })); } catch (e) {}
+    socket.on('close', () => { try { wsBroadcast.removeSocket(socket); } catch (e) {} });
+    socket.on('error', () => { try { wsBroadcast.removeSocket(socket); } catch (e) {} });
+  });
+  fastify.get('/api/ble/status', async () => { return { ok: true, status: 'no-ble', msg: 'stub para silenciar 404 del frontend' }; });
+  fastify.get('/health', async () => { return { ok: true, service: 'NEXUS-SENTINEL' }; });
+  fastify.get('/api/posiciones/latest', async () => {
+    try {
+      const dbMod = safeRequire('./db');
+      if (typeof dbMod.getLatestPositions === 'function') {
+        const rows = dbMod.getLatestPositions();
+        return rows.map((r) => ({ dispositivo_id: r.device || r.dispositivo_id || r.deviceId, nombre: r.nombre || r.device || r.dispositivo_id, lat: r.lat, lon: r.lon, velocidad: r.velocidad || 0, temperatura: r.temperatura || null, fuente: r.fuente || 'hubble', timestamp: r.timestamp || r.ts, rssi: r.rssi }));
+      }
+      if (typeof dbMod.getHistory === 'function') { return dbMod.getHistory(null, 50); }
+    } catch (e) { fastify.log.error(e); }
+    return [];
+  });
+  fastify.get('/api/posiciones/history', async (req) => {
+    try {
+      const { getHistory } = require('./history');
+      const device = req.query.device || req.query.deviceId || req.query.mac || null;
+      const limit = parseInt(req.query.limit || 100, 10) || 100;
+      const rows = device ? getHistory(device, limit) : getHistory(null, limit);
+      return Array.isArray(rows) ? rows : [];
+    } catch (e) { 
+      fastify.log.error(e); 
+      return []; 
+    }
+  });
+  if (typeof gpsRoutes === 'function') { await fastify.register(gpsRoutes); } else { fastify.log.error('gps_router no es funcion, tipo: ' + typeof gpsRoutes); }
+  await fastify.register(statik, { root: path.join(__dirname, 'public'), prefix: '/' });
+  return fastify;
+}
+async function main() {
+  const fastify = await build();
+  try { await 
+
+
+try {
+  if (fs.existsSync(hubbleDbPath)) {
+    hubbleDb = require('better-sqlite3')(hubbleDbPath);
+  }
+} catch (e) {
+  console.error('Error cargando hubble.db:', e.message);
+}
+
+  if (!hubbleDb) return [];
+  const rows = hubbleDb.prepare(`
+    SELECT h.*, 
+      (SELECT COUNT(*) FROM hubble_packets WHERE device_id = h.device_id) as packet_count
+    FROM hubble_packets h
+    WHERE h.id IN (
+      SELECT MAX(id) FROM hubble_packets GROUP BY device_id
+    )
+    ORDER BY h.timestamp DESC
+  `).all();
+  return rows.map(r => ({
+    device_id: r.device_id,
+    name: r.device_name || r.device_id,
+    lat: r.lat,
+    lon: r.lon,
+    last_packet_ts: r.timestamp,
+    payload: r.payload,
+    network: r.network,
+    packet_count: r.packet_count,
+    is_online: (Date.now() / 1000 - r.timestamp) < 3600
+  }));
+});
+
+  if (!hubbleDb) return [];
+  const limit = Math.min(parseInt(req.query.limit) || 200, 1000);
+  return hubbleDb.prepare(
+    'SELECT * FROM hubble_packets WHERE device_id = ? ORDER BY timestamp DESC LIMIT ?'
+  ).all(req.params.deviceId, limit);
+});
+
+  if (!hubbleDb) return { devices: 0, packets: 0 };
+  const devices = hubbleDb.prepare('SELECT COUNT(DISTINCT device_id) as n FROM hubble_packets').get().n;
+  const packets = hubbleDb.prepare('SELECT COUNT(*) as n FROM hubble_packets').get().n;
+  const last = hubbleDb.prepare('SELECT MAX(received_at) as t FROM hubble_packets').get().t;
+  return { devices, packets, last_received: last };
+});
+// ═══════════════════════════════════════════════════════════
+// RUTAS DE HUBBLE (INYECTADAS POR RUNEFORGE)
+// ═══════════════════════════════════════════════════════════
+const hubbleDbPath = path.join(__dirname, 'data', 'hubble.db');
+let hubbleDb = null;
+try {
+  if (fs.existsSync(hubbleDbPath)) {
+    hubbleDb = require('better-sqlite3')(hubbleDbPath);
+  }
+} catch (e) {
+  console.error('Error cargando hubble.db:', e.message);
+}
+
+fastify.get('/api/hubble/devices', async () => {
+  if (!hubbleDb) return [];
+  const rows = hubbleDb.prepare(`
+    SELECT h.*, 
+      (SELECT COUNT(*) FROM hubble_packets WHERE device_id = h.device_id) as packet_count
+    FROM hubble_packets h
+    WHERE h.id IN (
+      SELECT MAX(id) FROM hubble_packets GROUP BY device_id
+    )
+    ORDER BY h.timestamp DESC
+  `).all();
+  return rows.map(r => ({
+    device_id: r.device_id,
+    name: r.device_name || r.device_id,
+    lat: r.lat,
+    lon: r.lon,
+    last_packet_ts: r.timestamp,
+    payload: r.payload,
+    network: r.network,
+    packet_count: r.packet_count,
+    is_online: (Date.now() / 1000 - r.timestamp) < 3600
+  }));
+});
+
+fastify.get('/api/hubble/packets/:deviceId', async (req) => {
+  if (!hubbleDb) return [];
+  const limit = Math.min(parseInt(req.query.limit) || 200, 1000);
+  return hubbleDb.prepare(
+    'SELECT * FROM hubble_packets WHERE device_id = ? ORDER BY timestamp DESC LIMIT ?'
+  ).all(req.params.deviceId, limit);
+});
+
+fastify.get('/api/hubble/stats', async () => {
+  if (!hubbleDb) return { devices: 0, packets: 0 };
+  const devices = hubbleDb.prepare('SELECT COUNT(DISTINCT device_id) as n FROM hubble_packets').get().n;
+  const packets = hubbleDb.prepare('SELECT COUNT(*) as n FROM hubble_packets').get().n;
+  const last = hubbleDb.prepare('SELECT MAX(received_at) as t FROM hubble_packets').get().t;
+  return { devices, packets, last_received: last };
+});
+// ═══════════════════════════════════════════════════════════
+fastify.listen({ port: PORT, host: HOST }); } catch (err) { fastify.log.error(err); process.exit(1); }
+}
+if (require.main === module) { main(); }
+module.exports = { build };
+
+
+
+
+
+
+
+
+

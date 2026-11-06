@@ -1,6 +1,7 @@
-// gps_router.js - Validacion real. Antes aceptaba cualquier lat/lon sin rango.
-// Un lat 999 o un string te rompian el mapa o te metian basura.
 const { insertGpsPosition } = require('./db');
+const { checkGeofences } = require('./geofence');
+const { savePosition } = require('./history');
+const { broadcast } = require('./ws-broadcast');
 
 function isValidLat(lat) {
   return typeof lat === 'number' && Number.isFinite(lat) && lat >= -90 && lat <= 90;
@@ -13,10 +14,9 @@ function isValidRssi(rssi) {
 }
 
 async function gpsRoutes(fastify, options) {
-  // POST /api/gps/update - formato que espera fleet.html y tu SMS
+  // POST /api/gps/update
   fastify.post('/api/gps/update', async (request, reply) => {
     const body = request.body || {};
-    // Acepta lat/lon o latitud/longitud para no romper compat V5
     const device = typeof body.device === 'string' ? body.device.trim().slice(0, 64) : '';
     const lat = Number(body.lat ?? body.latitud);
     const lon = Number(body.lon ?? body.longitud ?? body.lng);
@@ -27,9 +27,8 @@ async function gpsRoutes(fastify, options) {
     if (!isValidLon(lon)) return reply.status(400).send({ error: 'lon fuera de rango -180 a 180' });
     if (!isValidRssi(rssi)) return reply.status(400).send({ error: 'rssi fuera de rango -120 a 0' });
 
-    // Anti-spam basico: ignora duplicados exactos en menos de 5s del mismo device
-    // Tu telemetry_history.json tenia el mismo dato cada 5s, 33 veces. Eso es sensor atorad o loop.
     try {
+      // Guardar en DB principal
       const row = insertGpsPosition({
         device,
         mac: typeof body.mac === 'string' ? body.mac.slice(0, 32) : null,
@@ -39,31 +38,75 @@ async function gpsRoutes(fastify, options) {
         temperatura: body.temperatura !== undefined ? Number(body.temperatura) : null,
         fuente: typeof body.fuente === 'string' ? body.fuente.slice(0, 20) : 'sms',
       });
-      return reply.send({ status: 'OK', id: row.lastInsertRowid });
+
+      // Guardar en historial (Time Slider)
+      try { savePosition(device, lat, lon, rssi); } catch(e) {}
+
+      // Lógica de Geocercas
+      const eventos = checkGeofences(device, lat, lon);
+      const NTFY_TOPIC = process.env.NTFY_TOPIC;
+      for (const e of eventos) {
+        fastify.log.info(`[GEOCERCAS] ${e.deviceId} ${e.tipo} ${e.nombre}`);
+        
+        // ALERTA PUSH VIA NTFY
+        if (NTFY_TOPIC) {
+          const msg = `🚨 GEOCERCA: ${e.deviceId} ${e.tipo} ${e.nombre}`;
+          fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
+            method: 'POST',
+            body: msg,
+            headers: { 'Title': 'NEXUS-SENTINEL', 'Priority': 'high', 'Tags': 'warning' }
+          }).catch(err => fastify.log.error('Error NTFY:', err));
+        }
+      }
+
+      // ALERTA DE SEÑAL CRÍTICA
+      if (NTFY_TOPIC && rssi !== null && rssi < -95) {
+        const msg = `⚠️ SEÑAL CRÍTICA: ${device} tiene RSSI ${rssi} dBm`;
+        fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
+          method: 'POST',
+          body: msg,
+          headers: { 'Title': 'NEXUS-SENTINEL', 'Priority': 'urgent', 'Tags': 'rotating_light' }
+        }).catch(err => fastify.log.error('Error NTFY:', err));
+      }
+
+      // Emitir por WebSocket
+      broadcast({ type: 'posicion', deviceId: device, lat, lon, rssi, eventos, ts: Date.now() });
+      if (eventos.length > 0) broadcast({ type: 'geocerca', eventos, ts: Date.now() });
+
+      return reply.send({ status: 'OK', id: row.lastInsertRowid, eventos });
     } catch (err) {
       fastify.log.error(err);
       return reply.status(500).send({ error: 'Error en BD' });
     }
   });
 
-  // POST /api/sms-gps - compat V5. Acepta texto tipo "LAT:25.123 LON:-103.45" o JSON
+  // POST /api/sms-gps
   fastify.post('/api/sms-gps', async (request, reply) => {
     const body = request.body || {};
+    
+    // Parsear texto de SMS si viene en formato crudo
     if (typeof body.texto === 'string') {
       const m = body.texto.match(/(-?\d+\.\d+)\s*[,;\s]\s*(-?\d+\.\d+)/);
       if (!m) return reply.status(400).send({ error: 'No se pudo parsear texto SMS' });
       request.body = { device: body.device || 'sms-unknown', lat: Number(m[1]), lon: Number(m[2]), fuente: 'sms' };
-      // Reusa la misma validacion llamando al handler de arriba via inject interno simple:
-      // Para mantenerlo simple, insertamos aqui con la misma validacion
     }
-    // Si llego JSON, lo tratamos como /api/gps/update
+
     if (body.lat !== undefined || body.texto) {
-      // Delega: Fastify no tiene re-dispatch facil, asi que validamos igual
-      const device = typeof (body.device || 'sms-unknown') === 'string' ? String(body.device || 'sms-unknown').slice(0, 64) : 'sms-unknown';
+      const device = typeof (body.device || body.deviceId || 'sms-unknown') === 'string' ? String(body.device || body.deviceId || 'sms-unknown').slice(0, 64) : 'sms-unknown';
       const lat = body.lat !== undefined ? Number(body.lat) : Number(body.texto ? body.texto.match(/(-?\d+\.\d+)/)[1] : NaN);
       const lon = body.lon !== undefined ? Number(body.lon) : NaN;
+      
       if (!isValidLat(lat) || !isValidLon(lon)) return reply.status(400).send({ error: 'Coordenadas invalidas en SMS' });
+      
+      // Guardar en DB principal
       const row = insertGpsPosition({ device, lat, lon, fuente: 'sms' });
+      
+      // Guardar en historial
+      try { savePosition(device, lat, lon, null); } catch(e) {}
+      
+      // Emitir por WebSocket (opcional, para que el frontend se actualice)
+      broadcast({ type: 'posicion', deviceId: device, lat, lon, ts: Date.now() });
+      
       return reply.send({ status: 'OK', id: row.lastInsertRowid });
     }
     return reply.status(400).send({ error: 'Faltan datos' });

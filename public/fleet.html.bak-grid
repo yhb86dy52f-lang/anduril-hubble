@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ANDURIL HUBBLE — Centro de Mando</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0B0B12">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0B0B12; --bg2:#11111C; --panel:#141422; --panel2:#1A1A2B;
+  --line:#23233A; --line2:#2E2E4A;
+  --txt:#F2F2F7; --muted:#9A9AB0; --muted2:#6B6B85;
+  --purple:#A855F7; --purple2:#7C3AED; --cyan:#22D3EE; --green:#22C55E; --green2:#16A34A;
+  --red:#F43F5E; --amber:#F59E0B; --blue:#3B82F6;
+  --r:12px; --r2:10px; --r3:8px;
+  --shadow:0 10px 30px rgba(0,0,0,.45);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100vh;width:100vw;overflow:hidden;background:var(--bg);color:var(--txt);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+button,input{font-family:inherit}
+a{color:inherit}
+#app{display:flex;flex-direction:column;height:100vh;width:100vw}
+
+/* HEADER */
+.header{height:64px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 18px;background:var(--bg2);border-bottom:1px solid var(--line);z-index:2000}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.logo{width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,#A855F7,#7C3AED);display:grid;place-items:center;color:#fff;font-weight:800;font-size:18px;letter-spacing:.5px;flex-shrink:0}
+.brand-txt{line-height:1.1;min-width:0}
+.brand-txt b{font-size:15px;letter-spacing:.08em;font-weight:800}
+.brand-txt span{display:block;font-size:11px;color:var(--muted);letter-spacing:.14em;font-weight:600;margin-top:2px}
+.nav{display:flex;gap:8px}
+.nav-btn{height:34px;padding:0 14px;border:1px solid var(--line2);background:#171728;color:var(--muted);border-radius:999px;font-size:12px;font-weight:600;cursor:pointer}
+.nav-btn.active{background:var(--txt);color:#111;border-color:var(--txt)}
+.btn-danger{height:34px;padding:0 14px;border:1px solid #3A1A22;background:#1F1216;color:#FDA4AF;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer}
+.head-right{display:flex;align-items:center;gap:14px}
+.status-pill{display:flex;align-items:center;gap:8px;background:#12261A;border:1px solid #1E3A28;padding:6px 10px;border-radius:999px;font-size:11px;font-weight:700;color:#86EFAC}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px rgba(34,197,94,.18);animation:pulse 1.8s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.clock{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--muted);text-align:right;line-height:1.3}
+.clock b{color:var(--txt);font-size:13px}
+#api-status{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--green);font-weight:700}
+
+/* MAIN */
+.main{flex:1;display:flex;min-height:0;position:relative}
+
+/* SIDEBAR */
+.sidebar{width:340px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;z-index:1500}
+.side-head{padding:14px 14px 10px;border-bottom:1px solid var(--line)}
+.side-head-top{display:flex;justify-content:space-between;align-items:center}
+.side-head-top h2{font-size:11px;letter-spacing:.14em;color:var(--muted);font-weight:700}
+.side-head-top strong{font-size:11px;color:var(--green)}
+.kpis{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}
+.kpi{background:var(--bg2);border:1px solid var(--line);border-radius:var(--r2);padding:10px}
+.kpi label{font-size:10px;letter-spacing:.12em;color:var(--muted);font-weight:700}
+.kpi b{display:block;font-size:20px;margin-top:4px;line-height:1}
+.kpi span{font-size:11px;color:var(--muted)}
+.kpi.green b{color:var(--green)} .kpi.amber b{color:var(--amber)} .kpi.purple b{color:#C4B5FD}
+.search{margin:12px 14px 0;position:relative}
+.search input{width:100%;height:38px;background:var(--bg2);border:1px solid var(--line2);color:var(--txt);border-radius:10px;padding:0 36px 0 36px;font-size:13px;outline:none}
+.search input::placeholder{color:var(--muted2)}
+.search input:focus{border-color:var(--purple)}
+.search svg{position:absolute;left:11px;top:11px;opacity:.6}
+.search button{position:absolute;right:8px;top:7px;width:24px;height:24px;border-radius:50%;border:none;background:#2A2A3F;color:#fff;cursor:pointer;font-size:12px;display:none}
+.filters{display:flex;gap:6px;padding:12px 14px 10px;flex-wrap:wrap}
+.filter-btn{height:30px;padding:0 12px;border-radius:999px;border:1px solid var(--line2);background:transparent;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer;letter-spacing:.04em}
+.filter-btn.active{background:var(--txt);color:#111;border-color:var(--txt)}
+.filter-btn small{opacity:.7;font-weight:600}
+#device-list{flex:1;overflow-y:auto;padding:4px 12px 12px;display:flex;flex-direction:column;gap:8px}
+.empty{padding:22px 12px;text-align:center;border:1px dashed var(--line2);border-radius:var(--r);color:var(--muted);font-size:12px;line-height:1.6}
+.device-item{background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);padding:12px;cursor:pointer;transition:.15s}
+.device-item:hover{border-color:#3B3B5C;transform:translateY(-1px)}
+.device-item.active{border-color:var(--purple);background:#1B1426;box-shadow:0 0 0 1px var(--purple) inset}
+.dev-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.dev-name{font-weight:700;font-size:13.5px;line-height:1.2;word-break:break-word}
+.dev-name small{display:block;font-size:11px;color:var(--muted);font-weight:500;margin-top:2px;font-family:"JetBrains Mono",monospace}
+.badge{font-size:10px;font-weight:800;letter-spacing:.08em;padding:4px 7px;border-radius:999px;white-space:nowrap}
+.badge.on{background:#12261A;color:#86EFAC;border:1px solid #1E3A28}
+.badge.off{background:#2A1216;color:#FDA4AF;border:1px solid #3A1A22}
+.dev-coords{display:flex;gap:14px;margin-top:10px;font-family:"JetBrains Mono",monospace;font-size:11px;color:#A5F3FC}
+.dev-coords span{color:var(--muted);font-family:Inter,sans-serif;font-size:10px;letter-spacing:.08em;display:block;margin-bottom:2px}
+.dev-stats{display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}
+.dev-stats b{color:var(--txt)}
+
+/* MAP */
+.map-wrap{flex:1;position:relative;background:#05030A;min-width:0}
+#map{width:100%;height:100%}
+.leaflet-layer{filter:invert(100%) hue-rotate(180deg) brightness(96%) contrast(92%) saturate(.75)}
+.leaflet-div-icon{background:transparent!important;border:none!important;box-shadow:none!important}
+.map-toolbar{position:absolute;top:14px;left:14px;z-index:1000;display:flex;gap:8px}
+.tool-btn{height:36px;padding:0 12px;background:#11111C;border:1px solid var(--line2);color:var(--txt);border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:7px;box-shadow:var(--shadow)}
+.map-legend{position:absolute;left:14px;bottom:14px;z-index:1000;background:rgba(17,17,28,.92);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:11px;color:var(--muted);display:flex;gap:14px;backdrop-filter:blur(6px)}
+.legend-item{display:flex;align-items:center;gap:6px}
+.legend-dot{width:10px;height:10px;border-radius:50%}
+.map-attrib{position:absolute;right:14px;bottom:14px;z-index:1000;background:rgba(17,17,28,.9);border:1px solid var(--line);border-radius:999px;padding:6px 10px;font-size:11px;color:var(--muted)}
+
+/* DETAIL PANEL */
+.info-panel{width:360px;flex-shrink:0;background:var(--panel);border-left:1px solid var(--line);display:none;flex-direction:column;min-height:0;z-index:1800}
+.info-panel.open{display:flex}
+.info-head{padding:16px 16px 12px;border-bottom:1px solid var(--line)}
+.info-head-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.info-head-top h3{font-size:17px;line-height:1.15;word-break:break-word}
+.info-head-top p{font-size:12px;color:var(--muted);margin-top:4px;font-family:"JetBrains Mono",monospace}
+.close-btn{width:32px;height:32px;border-radius:50%;border:1px solid var(--line2);background:var(--bg2);color:var(--txt);cursor:pointer;font-size:16px;line-height:1;flex-shrink:0}
+.info-status{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.pill{font-size:11px;font-weight:700;padding:6px 9px;border-radius:999px;border:1px solid var(--line2)}
+.pill.on{background:#12261A;color:#86EFAC;border-color:#1E3A28}
+.pill.off{background:#2A1216;color:#FDA4AF;border-color:#3A1A22}
+.pill.neutral{background:var(--bg2);color:var(--muted)}
+.info-content{padding:14px;flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+.section-label{font-size:10px;letter-spacing:.14em;color:var(--muted);font-weight:700}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat-box{background:var(--bg2);border:1px solid var(--line);border-radius:var(--r2);padding:11px}
+.stat-box label{font-size:10px;letter-spacing:.1em;color:var(--muted);font-weight:700}
+.stat-box b{display:block;font-size:16px;margin-top:5px;font-family:"JetBrains Mono",monospace}
+.stat-box span{font-size:11px;color:var(--muted)}
+.stat-box.full{grid-column:1 / -1}
+.stat-box.cyan b{color:#A5F3FC} .stat-box.green b{color:#86EFAC} .stat-box.amber b{color:#FCD34D}
+.btn-action{width:100%;height:42px;border-radius:10px;font-size:12px;font-weight:800;letter-spacing:.04em;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-primary{background:var(--txt);color:#111;border:1px solid var(--txt)}
+.btn-primary:hover{opacity:.92}
+.btn-outline{background:transparent;color:var(--txt);border:1px solid var(--line2)}
+.btn-alert{background:#2A1216;color:#FDA4AF;border:1px solid #3A1A22}
+.btn-action:disabled{opacity:.6;cursor:not-allowed}
+.note{font-size:11px;color:var(--muted);line-height:1.6;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px 11px}
+.timeline{border-left:1px solid var(--line2);margin-left:6px;padding-left:14px;display:flex;flex-direction:column;gap:12px}
+.timeline-item{position:relative;font-size:12px;line-height:1.5}
+.timeline-item::before{content:"";position:absolute;left:-19px;top:4px;width:9px;height:9px;border-radius:50%;background:var(--purple);border:2px solid var(--bg)}
+.timeline-item b{display:block;font-size:12px}
+.timeline-item span{color:var(--muted);font-size:11px}
+
+/* ALERTS */
+#alert-container{position:absolute;top:14px;right:374px;z-index:2500;display:flex;flex-direction:column;gap:10px;pointer-events:none;max-width:320px}
+.alert-box{background:#FFF1F2;border:1px solid #FECDD3;color:#881337;padding:12px 13px;border-radius:12px;font-size:12px;line-height:1.5;box-shadow:var(--shadow);pointer-events:auto}
+.alert-box b{font-size:11px;letter-spacing:.08em}
+.alert-box.success{background:#F0FDF4;border-color:#BBF7D0;color:#14532D}
+
+/* TIME SLIDER */
+.timeslider{height:68px;flex-shrink:0;background:var(--bg2);border-top:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:0 14px;z-index:2000}
+.ts-btn{height:36px;min-width:72px;padding:0 14px;border-radius:999px;border:none;background:var(--txt);color:#111;font-weight:800;font-size:12px;cursor:pointer}
+.ts-btn.secondary{background:#22223A;color:var(--txt);border:1px solid var(--line2)}
+#ts-range{flex:1;accent-color:var(--purple);height:6px;cursor:pointer}
+#ts-info{font-family:"JetBrains Mono",monospace;font-size:11px;color:#A5F3FC;min-width:280px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ts-live{font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--green);border:1px solid #1E3A28;background:#12261A;padding:6px 9px;border-radius:999px}
+
+/* MOBILE */
+@media(max-width:900px){
+  .sidebar{position:absolute;top:0;bottom:0;left:0;transform:translateX(-105%);transition:.25s;box-shadow:var(--shadow)}
+  .sidebar.open{transform:translateX(0)}
+  .info-panel{position:absolute;right:0;top:0;bottom:0;width:92vw;max-width:360px}
+  .clock{display:none}
+  #ts-info{display:none}
+  .brand-txt span{display:none}
+  #alert-container{right:14px;top:76px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="header">
+    <div class="brand">
+      <div class="logo">AH</div>
+      <div class="brand-txt"><b>ANDURIL HUBBLE</b><span>CENTRO DE MANDO &middot; NEXUS-SENTINEL</span></div>
+    </div>
+    <nav class="nav" aria-label="Vista">
+      <button class="nav-btn active" id="btn-map-view" onclick="showMapView()">MAPA</button>
+      <button class="nav-btn" id="btn-list-view" onclick="toggleSidebarMobile()">FLOTA</button>
+      <button class="btn-danger" onclick="apagarSistema()">APAGAR</button>
+    </nav>
+    <div class="head-right">
+      <div class="status-pill"><span class="dot"></span> <span id="api-status">EN LINEA</span></div>
+      <div class="clock"><b id="clock-time">--:--:--</b><br><span id="clock-date">--</span></div>
+    </div>
+  </header>
+
+  <div class="main">
+    <aside class="sidebar" id="sidebar">
+      <div class="side-head">
+        <div class="side-head-top"><h2>FLOTA</h2><strong><span id="kpi-online">0</span> ACTIVOS</strong></div>
+        <div class="kpis">
+          <div class="kpi purple"><label>TOTAL</label><b id="kpi-total">0</b><span>unidades</span></div>
+          <div class="kpi green"><label>EN LINEA</label><b id="kpi-online-2">0</b><span>ult. 15 min</span></div>
+          <div class="kpi amber"><label>FUERA</label><b id="kpi-offline">0</b><span>sin senal</span></div>
+        </div>
+      </div>
+      <div class="search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="search-input" placeholder="Buscar unidad por nombre o ID..." oninput="filterList()" autocomplete="off">
+        <button id="search-clear" onclick="clearSearch()" title="Limpiar busqueda">X</button>
+      </div>
+      <div class="filters" role="tablist" aria-label="Filtrar por fuente">
+        <button class="filter-btn active" data-filter="all" onclick="setSourceFilter('all', event)">TODOS <small id="count-all">0</small></button>
+        <button class="filter-btn" data-filter="sms" onclick="setSourceFilter('sms', event)">SMS <small id="count-sms">0</small></button>
+        <button class="filter-btn" data-filter="hubble" onclick="setSourceFilter('hubble', event)">HUBBLE <small id="count-hubble">0</small></button>
+        <button class="filter-btn" data-filter="tel" onclick="setSourceFilter('tel', event)">TEL <small id="count-tel">0</small></button>
+      </div>
+      <div id="device-list" aria-live="polite"></div>
+      <div style="padding:0 14px 14px;font-size:11px;color:var(--muted);line-height:1.6">Consejo: haz clic en una unidad para ver su detalle. Usa el slider inferior para reproducir su recorrido.</div>
+    </aside>
+
+    <section class="map-wrap">
+      <div id="map"></div>
+      <div class="map-toolbar">
+        <button class="tool-btn" onclick="centerOnFleet()">Centrar flota</button>
+        <button class="tool-btn" onclick="toggleSidebarMobile()">Ver lista</button>
+        <button class="tool-btn" onclick="loadPositions()">Actualizar</button>
+      </div>
+      <div class="map-legend">
+        <span class="legend-item"><span class="legend-dot" style="background:#22C55E"></span> En linea</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#94A3B8"></span> Fuera de linea</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#A855F7"></span> Seleccionado</span>
+      </div>
+      <div class="map-attrib" id="map-attrib">Torreon, Coahuila &middot; Mapa en vivo</div>
+      <div id="alert-container"></div>
+    </section>
+
+    <aside class="info-panel" id="info-panel" aria-label="Detalle de unidad">
+      <div class="info-head">
+        <div class="info-head-top">
+          <div><h3 id="info-title">Selecciona una unidad</h3><p id="info-subtitle">Sin seleccion</p></div>
+          <button class="close-btn" onclick="closePanel()" aria-label="Cerrar panel">X</button>
+        </div>
+        <div class="info-status" id="info-status">
+          <span class="pill neutral">SIN DATOS</span>
+        </div>
+      </div>
+      <div class="info-content" id="info-data">
+        <div class="note">Selecciona una unidad en la lista o en el mapa para ver su estado, coordenadas, velocidad y acciones. El panel se actualiza en vivo cada 5 segundos y al mover el Time Slider.</div>
+        <div>
+          <div class="section-label">RESUMEN</div>
+          <div class="stat-grid" style="margin-top:8px">
+            <div class="stat-box cyan"><label>LATITUD</label><b>--</b><span>Grados</span></div>
+            <div class="stat-box cyan"><label>LONGITUD</label><b>--</b><span>Grados</span></div>
+            <div class="stat-box"><label>VELOCIDAD</label><b>-- km/h</b><span>Promedio</span></div>
+            <div class="stat-box"><label>TEMPERATURA</label><b>-- C</b><span>Sensor</span></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="timeslider" id="time-slider-bar">
+    <button class="ts-btn" id="ts-play" onclick="toggleTimePlay()">PLAY</button>
+    <input id="ts-range" type="range" min="0" max="0" value="0" aria-label="Linea de tiempo">
+    <span id="ts-info">Sin historial — envia un POST para generar datos</span>
+    <button class="ts-btn secondary" id="ts-live" onclick="goLive()">LIVE</button>
+  </footer>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ===== CONFIG =====
+const API = '';
+const HEADERS = {};
+let map, markers = {}, allPositions = [], filteredPositions = [];
+let currentSearch = '', currentSourceFilter = 'all', selectedId = null;
+let timeHistory = [], timeIdx = 0, timePlaying = false, timeTimer = null, timeMarker = null;
+
+// ===== RELOJ =====
+function tickClock(){
+  const now = new Date();
+  const t = document.getElementById('clock-time');
+  const d = document.getElementById('clock-date');
+  if(t) t.textContent = now.toLocaleTimeString('es-MX',{hour12:false});
+  if(d) d.textContent = now.toLocaleDateString('es-MX',{weekday:'short', day:'2-digit', month:'short', year:'numeric'});
+}
+setInterval(tickClock, 1000); tickClock();
+
+// ===== MAPA =====
+map = L.map('map', {zoomControl:false}).setView([25.5446,-103.5331], 13);
+window.NEXUS_MAP = map;
+L.control.zoom({position:'bottomright'}).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'&copy; OpenStreetMap'}).addTo(map);
+function makeIcon(color, pulsing){
+  return L.divIcon({className:'', html:'<div style="width:18px;height:18px;border-radius:50%;background:'+color+';border:3px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.5)'+(pulsing?',0 0 0 6px '+color+'33':'')+'"></div>', iconSize:[18,18], iconAnchor:[9,9]});
+}
+const onlineIcon = makeIcon('#22C55E', true);
+const offlineIcon = makeIcon('#94A3B8', false);
+const selectedIcon = makeIcon('#A855F7', true);
+
+// ===== UTILS =====
+function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function isOnline(p){ try{ return ((new Date() - new Date(p.timestamp))/1000/60) < 15; }catch(e){ return false; } }
+function fmtTime(ts){ try{ return new Date(ts).toLocaleString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit',day:'2-digit',month:'short'}); }catch(e){ return String(ts||'--'); } }
+function fmtCoord(v){ const n = Number(v); return Number.isFinite(n) ? n.toFixed(6) : '--'; }
+
+// ===== FILTROS / BUSQUEDA =====
+function setSourceFilter(f, evt){
+  currentSourceFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  const btn = evt ? evt.target.closest('.filter-btn') : document.querySelector('[data-filter="'+f+'"]');
+  if(btn) btn.classList.add('active');
+  filterList();
+}
+function clearSearch(){ const i=document.getElementById('search-input'); i.value=''; document.getElementById('search-clear').style.display='none'; filterList(); }
+function filterList(){
+  const inp = document.getElementById('search-input');
+  currentSearch = inp.value.toLowerCase();
+  document.getElementById('search-clear').style.display = currentSearch ? 'block' : 'none';
+  filteredPositions = allPositions.filter(p=>{
+    const srcMatch = (currentSourceFilter==='all') || ((p.fuente||'sms').toLowerCase()===currentSourceFilter);
+    const id = (p.dispositivo_id||p.mid||'').toLowerCase();
+    const name = (p.nombre||'').toLowerCase();
+    return srcMatch && (id.includes(currentSearch)||name.includes(currentSearch));
+  });
+  renderList(); updateMap();
+}
+function showMapView(){ document.getElementById('sidebar').classList.remove('open'); }
+function toggleSidebarMobile(){ document.getElementById('sidebar').classList.toggle('open'); }
+function closePanel(){ document.getElementById('info-panel').classList.remove('open'); selectedId=null; document.querySelectorAll('.device-item').forEach(el=>el.classList.remove('active')); }
+function apagarSistema(){ if(confirm('Apagar el centro de mando? Se detendra la vista, el servidor seguira en PM2.')){ showAlert('Centro de mando en pausa. Recarga para continuar.', true); } }
+function centerOnFleet(){
+  if(!filteredPositions.length) return;
+  const bounds = L.latLngBounds(filteredPositions.map(p=>[Number(p.lat), Number(p.lon)]));
+  if(bounds.isValid()) map.fitBounds(bounds, {padding:[30,30]});
+}
+
+// ===== LISTA =====
+function renderList(){
+  const list = document.getElementById('device-list');
+  const total = allPositions.length;
+  const online = allPositions.filter(isOnline).length;
+  const offline = total - online;
+  document.getElementById('kpi-total').textContent = total;
+  document.getElementById('kpi-online').textContent = online;
+  document.getElementById('kpi-online-2').textContent = online;
+  document.getElementById('kpi-offline').textContent = offline;
+  document.getElementById('count-all').textContent = total;
+  document.getElementById('count-sms').textContent = allPositions.filter(p=>(p.fuente||'sms').toLowerCase()==='sms').length;
+  document.getElementById('count-hubble').textContent = allPositions.filter(p=>(p.fuente||'sms').toLowerCase()==='hubble').length;
+  document.getElementById('count-tel').textContent = allPositions.filter(p=>(p.fuente||'sms').toLowerCase()==='tel').length;
+
+  if(!filteredPositions.length){
+    list.innerHTML = '<div class="empty"><b>Sin unidades con este filtro</b><br>Prueba con TODOS o limpia la busqueda.<br><br><button class="filter-btn active" onclick="setSourceFilter(\'all\');clearSearch()">Ver todas</button></div>';
+    return;
+  }
+  list.innerHTML = filteredPositions.map(p=>{
+    const id = p.dispositivo_id || p.mid || '';
+    const on = isOnline(p);
+    const vel = p.velocidad ?? p.speed ?? 0;
+    const temp = (p.temperatura ?? p.temp ?? '--');
+    const rssi = (p.rssi ?? '--');
+    const active = (selectedId===id) ? ' active' : '';
+    return '<article class="device-item'+active+'" data-id="'+esc(id)+'" onclick="focusDevice(\''+esc(id)+'\')">'
+      + '<div class="dev-top"><div><div class="dev-name">'+esc(p.nombre||id)+'<small>ID: '+esc(id)+' &middot; '+esc((p.fuente||'sms').toUpperCase())+'</small></div></div><span class="badge '+(on?'on':'off')+'">'+(on?'EN LINEA':'FUERA')+'</span></div>'
+      + '<div class="dev-coords"><div><span>LATITUD</span>'+fmtCoord(p.lat)+'</div><div><span>LONGITUD</span>'+fmtCoord(p.lon)+'</div><div><span>RSSI</span>'+esc(String(rssi))+' dBm</div></div>'
+      + '<div class="dev-stats"><span>Velocidad <b>'+esc(String(vel))+' km/h</b></span><span>Temp <b>'+esc(String(temp))+' &deg;C</b></span><span>'+fmtTime(p.timestamp)+'</span></div>'
+      + '</article>';
+  }).join('');
+}
+
+// ===== MAPA =====
+function updateMap(){
+  filteredPositions.forEach(p=>{
+    const id = p.dispositivo_id || p.mid; if(!id) return;
+    const on = isOnline(p);
+    const ll = [Number(p.lat), Number(p.lon)];
+    const icon = (selectedId===id) ? selectedIcon : (on ? onlineIcon : offlineIcon);
+    if(markers[id]){ markers[id].setLatLng(ll).setIcon(icon); }
+    else{ markers[id] = L.marker(ll,{icon:icon}).addTo(map).on('click',()=>focusDevice(id)); }
+  });
+  Object.keys(markers).forEach(id=>{
+    if(!filteredPositions.some(p=>(p.dispositivo_id||p.mid)===id)){ map.removeLayer(markers[id]); delete markers[id]; }
+  });
+}
+
+// ===== DETALLE =====
+function focusDevice(id){
+  const p = allPositions.find(x=>(x.dispositivo_id||x.mid)===id); if(!p) return;
+  selectedId = id;
+  map.setView([Number(p.lat), Number(p.lon)], 15);
+  document.querySelectorAll('.device-item').forEach(el=>el.classList.toggle('active', el.dataset.id===id));
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('info-panel').classList.add('open');
+  document.getElementById('info-title').textContent = p.nombre || id;
+  document.getElementById('info-subtitle').textContent = 'ID: '+id+'  ·  Fuente: '+String(p.fuente||'sms').toUpperCase()+'  ·  '+fmtTime(p.timestamp);
+  const on = isOnline(p);
+  document.getElementById('info-status').innerHTML = '<span class="pill '+(on?'on':'off')+'">'+(on?'EN LINEA':'FUERA DE LINEA')+'</span><span class="pill neutral">Ult. actualizacion: '+fmtTime(p.timestamp)+'</span>';
+  const vel = p.velocidad ?? p.speed ?? 0;
+  const temp = p.temperatura ?? p.temp ?? '--';
+  const rssi = p.rssi ?? '--';
+  document.getElementById('info-data').innerHTML =
+    '<div><div class="section-label">UBICACION EN VIVO</div><div class="stat-grid" style="margin-top:8px">'
+    + '<div class="stat-box cyan"><label>LATITUD</label><b>'+fmtCoord(p.lat)+'</b><span>Grados decimales</span></div>'
+    + '<div class="stat-box cyan"><label>LONGITUD</label><b>'+fmtCoord(p.lon)+'</b><span>Grados decimales</span></div>'
+    + '<div class="stat-box"><label>VELOCIDAD</label><b>'+esc(String(vel))+' km/h</b><span>Instantanea</span></div>'
+    + '<div class="stat-box"><label>TEMPERATURA</label><b>'+esc(String(temp))+' &deg;C</b><span>Sensor</span></div>'
+    + '<div class="stat-box"><label>SENAL (RSSI)</label><b>'+esc(String(rssi))+' dBm</b><span>Intensidad</span></div>'
+    + '<div class="stat-box"><label>ESTADO</label><b style="color:'+(on?'#22C55E':'#F43F5E')+'">'+(on?'EN LINEA':'FUERA')+'</b><span>Ult. 15 min</span></div>'
+    + '</div></div>'
+    + '<div><div class="section-label">ACCIONES</div><div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">'
+    + '<button class="btn-action btn-primary" onclick="requestGpsUpdate(\''+esc(id)+'\')">SOLICITAR ESTATUS REAL</button>'
+    + '<button class="btn-action btn-outline" onclick="centerOnFleet();document.getElementById(\'info-panel\').classList.remove(\'open\')">VER TODA LA FLOTA</button>'
+    + '<button class="btn-action btn-alert" onclick="showAlert(\'Alerta enviada a '+esc(id)+'\')">ENVIAR ALERTA</button>'
+    + '</div></div>'
+    + '<div><div class="section-label">ACTIVIDAD RECIENTE</div><div class="timeline" style="margin-top:10px">'
+    + '<div class="timeline-item"><b>Posicion actualizada</b><span>'+fmtTime(p.timestamp)+' — Lat '+fmtCoord(p.lat)+', Lon '+fmtCoord(p.lon)+'</span></div>'
+    + '<div class="timeline-item"><b>Sincronizado con el servidor</b><span>Canal: '+esc(String(p.fuente||'sms').toUpperCase())+' · RSSI '+esc(String(rssi))+' dBm</span></div>'
+    + '<div class="timeline-item"><b>Listo para reproducir recorrido</b><span>Usa el Time Slider inferior y pulsa PLAY</span></div>'
+    + '</div></div>'
+    + '<div class="note">Si el dispositivo no responde, pulsa SOLICITAR ESTATUS REAL. El servidor enviara la orden y la unidad reportara en su siguiente ciclo.</div>';
+  updateMap();
+  loadTimeHistory(id);
+}
+
+async function requestGpsUpdate(id){
+  const p = allPositions.find(x=>(x.dispositivo_id||x.mid)===id);
+  const nombre = p ? (p.nombre||id) : id;
+  const btn = document.querySelector('button[onclick="requestGpsUpdate(\''+CSS.escape(id)+'\')"]');
+  const orig = btn ? btn.textContent : '';
+  if(btn){ btn.textContent='ENVIANDO...'; btn.disabled=true; }
+  try{
+    await fetch('/api/alert',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({device:id, mensaje:'Solicitar estatus real para '+nombre})});
+    showAlert('Orden enviada al servidor para: '+nombre, true);
+  }catch(e){ showAlert('Error al conectar con el servidor'); }
+  finally{ setTimeout(()=>{ if(btn){ btn.textContent=orig; btn.disabled=false; } }, 3000); }
+}
+
+function showAlert(msg, ok){
+  const c = document.getElementById('alert-container');
+  const box = document.createElement('div');
+  box.className = 'alert-box' + (ok?' success':'');
+  box.innerHTML = '<b>'+(ok?'OPERACION EXITOSA':'ALERTA')+'</b><div>'+esc(msg)+'</div>';
+  c.appendChild(box);
+  setTimeout(()=>{ if(box.parentNode) box.parentNode.removeChild(box); }, 6000);
+}
+
+// ===== CARGA =====
+async function loadPositions(){
+  try{
+    const r = await fetch(API + '/api/posiciones/latest', {headers: HEADERS});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    allPositions = Array.isArray(j) ? j : (j.rows||[]);
+    document.getElementById('api-status').textContent = 'EN LINEA';
+    document.getElementById('api-status').style.color = '#86EFAC';
+    filterList();
+    if(selectedId){
+      const p = allPositions.find(x=>(x.dispositivo_id||x.mid)===selectedId);
+      if(p) focusDevice(selectedId);
+    }
+  }catch(e){
+    document.getElementById('api-status').textContent = 'SIN CONEXION';
+    document.getElementById('api-status').style.color = '#FDA4AF';
+  }
+}
+
+// ===== TIME SLIDER INTEGRADO =====
+async function loadTimeHistory(deviceId){
+  const info = document.getElementById('ts-info');
+  try{
+    let device = deviceId || selectedId || '';
+    if(!device){
+      try{
+        const r = await fetch('/api/posiciones/latest'); const j = await r.json();
+        if(Array.isArray(j) && j.length) device = j[0].dispositivo_id || j[0].device || '';
+      }catch(e){}
+    }
+    const qs = device ? '?device='+encodeURIComponent(device)+'&limit=200' : '?limit=200';
+    const r = await fetch('/api/posiciones/history'+qs);
+    const j = await r.json();
+    timeHistory = Array.isArray(j) ? j.slice().reverse() : [];
+    const range = document.getElementById('ts-range');
+    range.max = Math.max(0, timeHistory.length-1);
+    range.value = timeHistory.length ? timeHistory.length-1 : 0;
+    if(timeHistory.length){
+      timeIdx = timeHistory.length-1;
+      showTimePoint(timeIdx);
+      if(info) info.textContent = 'Recorrido cargado: '+timeHistory.length+' puntos · '+device;
+    } else if(info) info.textContent = 'Sin historial para '+ (device||'esta unidad');
+  }catch(e){ if(info) info.textContent = 'No se pudo cargar el historial'; }
+}
+function showTimePoint(i){
+  if(!timeHistory.length) return;
+  const p = timeHistory[i];
+  const lat = Number(p.lat), lon = Number(p.lon);
+  const info = document.getElementById('ts-info');
+  if(info) info.textContent = (p.timestamp||p.ts||'')+'  ·  '+ (p.dispositivo_id||p.device||'') +'  ·  Lat '+lat.toFixed(5)+' Lon '+lon.toFixed(5)+'  ·  RSSI '+ (p.rssi ?? '--') +' dBm  ·  '+(i+1)+'/'+timeHistory.length;
+  if(window.NEXUS_MAP && window.L){
+    if(!timeMarker){ timeMarker = L.marker([lat,lon],{icon:selectedIcon}).addTo(window.NEXUS_MAP); }
+    else timeMarker.setLatLng([lat,lon]);
+  }
+}
+function toggleTimePlay(){
+  const btn = document.getElementById('ts-play');
+  if(timePlaying){ stopTimePlay(); return; }
+  if(!timeHistory.length) return;
+  timePlaying = true; btn.textContent = 'PAUSA';
+  timeTimer = setInterval(()=>{
+    timeIdx = (timeIdx+1) % timeHistory.length;
+    document.getElementById('ts-range').value = timeIdx;
+    showTimePoint(timeIdx);
+    if(timeIdx===timeHistory.length-1) stopTimePlay();
+  }, 500);
+}
+function stopTimePlay(){ timePlaying=false; if(timeTimer) clearInterval(timeTimer); const b=document.getElementById('ts-play'); if(b) b.textContent='PLAY'; }
+function goLive(){ stopTimePlay(); loadPositions(); if(selectedId) loadTimeHistory(selectedId); else loadTimeHistory(); }
+document.getElementById('ts-range').addEventListener('input', (e)=>{ timeIdx = parseInt(e.target.value,10)||0; stopTimePlay(); showTimePoint(timeIdx); });
+
+loadPositions();
+setInterval(loadPositions, 5000);
+loadTimeHistory();
+</script>
+<script src="/ws-client.js"></script>
+<script src="/time-slider.js"></script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('/sw.js').then(function(reg){ console.log('[PWA] SW registrado', reg.scope); }).catch(function(err){ console.log('[PWA] SW fallo', err); });
+  });
+}
+</script>
+</body>
+</html>
+
