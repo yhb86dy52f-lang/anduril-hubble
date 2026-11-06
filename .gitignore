@@ -1,0 +1,22 @@
+# Dependencias
+node_modules/
+server/node_modules/
+
+# Base de datos y datos sensibles
+data/*
+!data/.gitkeep
+*.db
+*.db-shm
+*.db-wal
+*.jsonl
+*.log
+*.csv
+
+# Entorno y secretos
+.env
+.env.local
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+desktop.ini

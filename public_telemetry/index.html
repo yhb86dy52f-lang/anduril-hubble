@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS SENTINEL | Telemetría</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font-family: Consolas, "Segoe UI", monospace; background: #0b0f14; color: #e6edf3; }
+  body { display: flex; height: 100vh; overflow: hidden; }
+  #errorBanner { position: fixed; top: 0; left: 0; right: 0; z-index: 9999; display: none; padding: 10px 14px; background: #7f1d1d; color: #fff; border-bottom: 1px solid #ef4444; font-size: 13px; }
+  #sidebar { width: 290px; min-width: 290px; background: #111820; border-right: 1px solid #1f2a37; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+  #sidebar h1 { margin: 0 0 8px; font-size: 18px; letter-spacing: 2px; color: #00ff9d; }
+  .card { background: #0f1620; border: 1px solid #1f2a37; border-radius: 8px; padding: 10px; }
+  .label { color: #7d8ea3; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+  .value { font-size: 15px; margin-top: 3px; word-break: break-all; }
+  .status { display: inline-block; padding: 4px 10px; border-radius: 999px; font-weight: bold; font-size: 12px; letter-spacing: 1px; }
+  .online { background: rgba(0,255,157,0.12); color: #00ff9d; border: 1px solid #00ff9d; }
+  .offline { background: rgba(239,68,68,0.12); color: #ef4444; border: 1px solid #ef4444; }
+  button { margin-top: auto; width: 100%; padding: 12px; background: #1d4ed8; color: #fff; border: 0; border-radius: 8px; cursor: pointer; font-weight: bold; letter-spacing: 1px; }
+  button:hover { background: #2563eb; }
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  
+  #liveTerminal { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.85); border: 1px solid #00ff9d; padding: 8px; color: #00ff9d; font-size: 10px; font-family: monospace; width: 320px; height: 140px; overflow-y: hidden; z-index: 1000; pointer-events: none; box-shadow: 0 0 10px rgba(0,255,157,0.2); }
+  .term-line { margin-bottom: 3px; opacity: 0.8; }
+  .signal-bars { display: flex; align-items: flex-end; gap: 3px; height: 18px; margin-top: 5px; }
+  .signal-bar { width: 6px; background: #1f2a37; border-radius: 2px; transition: 0.3s; }
+  .signal-bar:nth-child(1) { height: 25%; }
+  .signal-bar:nth-child(2) { height: 50%; }
+  .signal-bar:nth-child(3) { height: 75%; }
+  .signal-bar:nth-child(4) { height: 100%; }
+  .signal-active { background: #00ff9d; box-shadow: 0 0 5px #00ff9d; }
+  .signal-warning { background: #eab308; box-shadow: 0 0 5px #eab308; }
+  .signal-danger { background: #ef4444; box-shadow: 0 0 5px #ef4444; }
+  .alert-border { border: 2px solid #ef4444 !important; animation: flash 1s infinite alternate; }
+  @keyframes flash { from { background: #111820; } to { background: #3f1a1a; } }
+  #map { flex: 2; min-height: 240px; z-index: 1; }
+  #chartWrap { height: 280px; padding: 12px 16px; background: #0b0f14; border-top: 1px solid #1f2a37; }
+  canvas { width: 100% !important; height: 100% !important; }
+  /* Efecto Scanlines tipo Monitor CRT */
+  body::after {
+    content: " "; display: block; position: absolute; top: 0; left: 0; bottom: 0; right: 0;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    z-index: 10; opacity: 0.6; background-size: 100% 3px, 3px 100%; pointer-events: none;
+  }
+  /* Radar Pulse */
+  .radar-pulse {
+    width: 20px; height: 20px; background: #00ff9d; border-radius: 50%;
+    box-shadow: 0 0 0 0 rgba(0, 255, 157, 0.7);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 255, 157, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 20px rgba(0, 255, 157, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 255, 157, 0); }
+  }
+  .neon-text { text-shadow: 0 0 5px #00ff9d, 0 0 10px #00ff9d; }
+  .leaflet-container { background: #0b0f14 !important; }
+  /* Efecto Neón en el Título */
+  #sidebar h1 { text-shadow: 0 0 5px #00ff9d, 0 0 10px #00ff9d, 0 0 20px #00ff9d; }
+  /* Efecto Neón en la Gráfica (Canvas) */
+  #rssiChart { filter: drop-shadow(0 0 8px rgba(0, 255, 157, 0.4)); }
+  /* Filtro solo para el fondo del mapa (tiles) */
+  .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(1.3); }
+  /* Asegurar que los marcadores (radar) no se inviertan */
+  .leaflet-marker-pane, .leaflet-overlay-pane { filter: none !important; }
+</style>
+</head>
+<body>
+<div id="errorBanner"></div>
+
+<div id="sidebar">
+  <h1>NEXUS // SENTINEL</h1>
+
+  <div class="card">
+    <div class="label">Dispositivo</div>
+    <div class="value" id="deviceName">---</div>
+  </div>
+
+  <div class="card">
+    <div class="label">Estado</div>
+    <div><span id="deviceStatus" class="status offline">OFFLINE</span></div>
+  </div>
+
+  <div class="card">
+    <div class="label">RSSI</div>
+    <div class="value"><span id="rssi">--</span> dBm</div>
+  <div class="card">
+    <div class="label">Latencia API</div>
+    <div class="value" id="ping">-- ms</div>
+  </div>
+  </div>
+
+  <div class="card">
+    <div class="label">MAC</div>
+    <div class="value" id="mac">--</div>
+  <div class="card">
+    <div class="label">Señal (Visual)</div>
+    <div class="signal-bars" id="signalBars">
+      <div class="signal-bar"></div><div class="signal-bar"></div><div class="signal-bar"></div><div class="signal-bar"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="label">Distancia Estimada</div>
+    <div class="value" id="distance">-- m</div>
+  </div>
+  <div class="card">
+    <div class="label">Rol / Categoría</div>
+    <div class="value" id="role" style="font-size: 12px;">--</div>
+  </div>
+  </div>
+
+  <div class="card">
+    <div class="label">Última actualización</div>
+    <div class="value" id="lastUpdate">--</div>
+  <div class="card">
+    <div class="label">Hora Táctica</div>
+    <div class="value" id="clock" style="font-size: 18px; letter-spacing: 2px;">--:--:--</div>
+  </div>
+  </div>
+
+  <button id="exportBtn">EXPORTAR HISTORIAL (CSV)</button>
+<button id="clearBtn" style="background: #7f1d1d; margin-top: 5px; border: 1px solid #ef4444;">BORRAR HISTORIAL</button>
+</div>
+
+<div id="main">
+  <div id="map"><div id="liveTerminal"></div></div>
+  <div id="chartWrap"><canvas id="rssiChart"></canvas></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
+setTimeout(function(){ if(typeof fetchHistory === 'function') fetchHistory(); }, 500);
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
+setTimeout(function(){ if(typeof fetchHistory === 'function') fetchHistory(); }, 500);
+</script>
+<script>
+const API_URL = '/api/ble/status';
+const HISTORY_URL = '/api/history';
+let history = [];
+let chart = null;
+let map = null;
+let marker = null;
+
+const errBanner = document.getElementById('errorBanner');
+
+function showError(msg) {
+  errBanner.style.display = 'block';
+  errBanner.textContent = '⚠ ' + msg;
+  console.error(msg);
+}
+
+window.addEventListener('error', function (e) {
+  showError('JS: ' + e.message);
+});
+
+function normalize(data) {
+  const d = Array.isArray(data) ? data[0] : (data && data.data ? data.data : data);
+  return {
+    name: d && (d.name || d.device) ? (d.name || d.device) : 'NEXUS-SENTINEL',
+    rssi: Number(d && (d.rssi !== undefined ? d.rssi : d.RSSI)),
+    mac: d && (d.address || d.mac || d.MAC) ? (d.address || d.mac || d.MAC) : '--',
+    lat: Number.isFinite(Number(d && (d.lat !== undefined ? d.lat : d.latitude))) ? Number(d.lat || d.latitude) : (window.userLat || 19.4326),
+    lng: Number.isFinite(Number(d && (d.lng !== undefined ? d.lng : (d.lon !== undefined ? d.lon : d.longitude)))) ? Number(d.lng || d.lon || d.longitude) : (window.userLng || -99.1332),
+    distance: d && d.distance_m_est !== undefined ? d.distance_m_est : null,
+    role: d && d.role && d.category ? d.role + ' / ' + d.category : '--'
+  };
+}
+
+function setStatus(online) {
+  const el = document.getElementById('deviceStatus');
+  el.textContent = online ? 'ONLINE' : 'OFFLINE';
+  el.className = 'status ' + (online ? 'online' : 'offline');
+}
+
+function initMap() {
+  if (!window.L) { showError('Leaflet no cargó.'); return; }
+  const startLat = window.userLat || 19.4326;
+  const startLng = window.userLng || -99.1332;
+  map = L.map('map', { zoomControl: true }).setView([startLat, startLng], 16);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OSM' }).addTo(map);
+  
+  const radarIcon = L.divIcon({ className: '', html: '<div class="radar-pulse"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
+  marker = L.marker([startLat, startLng], { icon: radarIcon }).addTo(map);
+  setTimeout(() => { map.invalidateSize(); }, 500);
+}
+
+function initChart() {
+  if (!window.Chart) { showError('Chart.js no cargó.'); return; }
+  const ctx = document.getElementById('rssiChart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: [], datasets: [{ label: 'RSSI (dBm)', data: [], borderColor: '#00ff9d', backgroundColor: 'rgba(0,255,157,0.12)', fill: true, tension: 0.25, pointRadius: 2 }] },
+    options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: false }, y: { suggestedMin: -100, suggestedMax: -30, grid: { color: 'rgba(255,255,255,0.08)' }, ticks: { color: '#9fb3c8' } } }, plugins: { legend: { labels: { color: '#e6edf3' } } } }
+  });
+}
+
+async function fetchHistory() {
+  try {
+    console.log('📡 Solicitando historial a SQLite...');
+    const res = await fetch(HISTORY_URL, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    console.log('📊 Datos recibidos:', data);
+
+    if (data && data.length > 0) {
+      const labels = data.map(d => {
+        let dateStr = d.timestamp || new Date().toISOString();
+        if (dateStr.includes(' ')) dateStr = dateStr.replace(' ', 'T') + 'Z';
+        return new Date(dateStr).toLocaleTimeString();
+      }).reverse();
+      
+      const rssiData = data.map(d => Number(d.rssi)).reverse();
+      
+      if (chart) {
+        chart.data.labels = labels;
+        chart.data.datasets[0].data = rssiData;
+        chart.update();
+        console.log('✅ Gráfica actualizada con', rssiData.length, 'puntos.');
+      }
+    }
+  } catch (e) {
+    console.warn('❌ Error al cargar historial SQLite:', e.message);
+  }
+}
+
+async function poll() {
+  try {
+    const startTime = performance.now();
+    const res = await fetch(API_URL, { cache: 'no-store' });
+    const pingTime = Math.round(performance.now() - startTime);
+    
+    const pingEl = document.getElementById('ping');
+    if (pingEl) { pingEl.textContent = pingTime + ' ms'; pingEl.style.color = pingTime > 500 ? '#ef4444' : (pingTime > 200 ? '#eab308' : '#00ff9d'); }
+
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    
+    if (!json || json.length === 0) { setStatus(false); return; }
+    
+    const d = normalize(json);
+    document.getElementById('deviceName').textContent = d.name;
+    document.getElementById('mac').textContent = d.mac;
+    document.getElementById('rssi').textContent = Number.isFinite(d.rssi) ? d.rssi : '--';
+    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+    document.getElementById('distance').textContent = d.distance !== null ? d.distance + ' m' : '-- m';
+    document.getElementById('role').textContent = d.role;
+
+    // Barras de señal
+    const bars = document.querySelectorAll('.signal-bar');
+    bars.forEach(b => b.className = 'signal-bar');
+    let activeBars = 0; let signalClass = 'signal-active';
+    if (d.rssi >= -60) activeBars = 4;
+    else if (d.rssi >= -75) activeBars = 3;
+    else if (d.rssi >= -85) { activeBars = 2; signalClass = 'signal-warning'; }
+    else if (d.rssi >= -95) { activeBars = 1; signalClass = 'signal-danger'; }
+    for (let i = 0; i < activeBars; i++) bars[i].classList.add(signalClass);
+
+    // Terminal
+    const term = document.getElementById('liveTerminal');
+    if (term) {
+      const line = document.createElement('div');
+      line.className = 'term-line';
+      line.textContent = '> ' + new Date().toLocaleTimeString() + ' | ' + d.name + ' | RSSI: ' + d.rssi + ' | MAC: ' + d.mac;
+      term.appendChild(line);
+      if (term.childNodes.length > 8) term.removeChild(term.firstChild);
+    }
+
+    // Mapa
+    if (map && marker && Number.isFinite(d.lat) && Number.isFinite(d.lng)) {
+      marker.setLatLng([d.lat, d.lng]);
+    }
+
+    // Gráfica en vivo
+    if (Number.isFinite(d.rssi) && chart) {
+      chart.data.labels.push(new Date().toLocaleTimeString());
+      chart.data.datasets[0].data.push(d.rssi);
+      if (chart.data.labels.length > 60) { chart.data.labels.shift(); chart.data.datasets[0].data.shift(); }
+      chart.update('none');
+    }
+
+    setStatus(true);
+  } catch (e) {
+    setStatus(false);
+    showError('API: ' + e.message);
+  }
+}
+
+function exportCSV() {
+  if (!history.length) { alert('No hay historial en memoria para exportar.'); return; }
+  // ... lógica de exportación simple
+}
+
+// Reloj
+setInterval(() => {
+  const clockEl = document.getElementById('clock');
+  if (clockEl) clockEl.textContent = new Date().toLocaleTimeString();
+}, 1000);
+
+// INICIALIZACIÓN
+initMap();
+initChart();
+fetchHistory().then(() => {
+  poll();
+  setInterval(poll, 2000);
+});
+</script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
