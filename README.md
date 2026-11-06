@@ -13,12 +13,13 @@ Sin afiliación a Anduril Industries, Hubble Network, ni a ninguna empresa de de
 ## Instalación
 1. Clonar el repo.
 2. 
-pm install
+npm install
 3. Copiar .env.example a .env y configurar API_KEY.
 4. 
-pm start
+npm start
 
 ## Seguridad
 - Ninguna API Key está expuesta en el frontend.
 - La ingesta de GPS cuenta con validación estricta (latitud -90 a 90, longitud -180 a 180).
 - Los datos de telemetría y bases de datos están excluidos del repositorio.
+

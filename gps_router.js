@@ -70,4 +70,5 @@ async function gpsRoutes(fastify, options) {
   });
 }
 
-module.exports = gpsRoutes;
+module.exports = { isValidLat, isValidLon, isValidRssi, gpsRoutes };
+
