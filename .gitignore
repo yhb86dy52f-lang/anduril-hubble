@@ -4,17 +4,22 @@ node_modules/
 # Archivos de entorno y secretos
 .env
 
-# Base de datos local
+# Base de datos local y sus archivos temporales (WAL/SHM)
 nexus_history.db
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
+*.sqlite3
 
-# Archivos de registro y basura
+# Archivos de registro, basura y respaldos
 *.log
 *.bak
+*.bak-*
 *.tmp
 *.ps1
 *.cjs.bak
+*.jsonl
 scripts_temporales/
 
 # Archivos del sistema operativo
