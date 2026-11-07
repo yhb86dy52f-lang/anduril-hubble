@@ -167,40 +167,8 @@ a{color:inherit}
 .fleet-table td { padding: 12px 16px; border-bottom: 1px solid var(--line); color: var(--txt); font-family: "JetBrains Mono", monospace; }
 .fleet-table tr:hover td { background: rgba(168, 85, 247, .06); }
 .btn-row { padding: 6px 12px; background: var(--bg2); border: 1px solid var(--line2); color: var(--txt); border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; }
-.btn-row:hover { border-color: var(--purple); color: var(--purple); }.leaflet-layer {
-    filter: brightness(0.7) invert(1) contrast(2) hue-rotate(200deg) saturate(0.3) brightness(0.9) !important;
-}
-
-.fleet-table tr:nth-child(even) { background: rgba(255,255,255,0.02); }
-.fleet-table tr:hover { background: rgba(168,85,247,0.1); }
-.fleet-table td { padding: 12px 16px; border-bottom: 1px solid var(--line); color: var(--txt); font-family: "JetBrains Mono", monospace; font-size: 12px; }
-.fleet-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
-
+.btn-row:hover { border-color: var(--purple); color: var(--purple); }
 </style>
-<style>
-/* Radar pulsante para NEXUS-SENTINEL (live) */
-@keyframes hub-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.7); }
-  70% { box-shadow: 0 0 0 15px rgba(168, 85, 247, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
-}
-.hub-live-marker {
-  animation: hub-pulse 2s infinite;
-  border-radius: 50%;
-}
-/* Indicador de sincronización en el header */
-#sync-indicator {
-  display: inline-block;
-  font-size: 11px;
-  color: #86EFAC;
-  margin-left: 8px;
-  font-family: monospace;
-  opacity: 0.8;
-}
-</style>
-
-    
-    
 </head>
 <body>
 <div id="app">
@@ -257,7 +225,7 @@ a{color:inherit}
         <span class="legend-item"><span class="legend-dot" style="background:#94A3B8"></span> Fuera de linea</span>
         <span class="legend-item"><span class="legend-dot" style="background:#A855F7"></span> Seleccionado</span>
       </div>
-      <div class="map-attrib" id="map-attrib">NEXUS-SENTINEL &middot; Esperando datos...</div>
+      <div class="map-attrib" id="map-attrib">Torreon, Coahuila &middot; Mapa en vivo</div>
       <div id="alert-container"></div>
     </section>
 
@@ -273,42 +241,34 @@ a{color:inherit}
       </div>
       <div class="info-content" id="info-data">
         <div class="note">Selecciona una unidad en la lista o en el mapa para ver su estado, coordenadas, velocidad y acciones. El panel se actualiza en vivo cada 5 segundos y al mover el Time Slider.</div>
-        <div>
-          <div class="section-label">RESUMEN</div>
-          <div class="stat-grid" style="margin-top:8px">
-            <div class="stat-box cyan"><label>LATITUD</label><b>--</b><span>Grados</span></div>
-            <div class="stat-box cyan"><label>LONGITUD</label><b>--</b><span>Grados</span></div>
-            <div class="stat-box"><label>VELOCIDAD</label><b>-- km/h</b><span>Promedio</span></div>
-            <div class="stat-box"><label>TEMPERATURA</label><b>-- C</b><span>Sensor</span></div>
-          </div>
-        </div>
       </div>
     </aside>
   </div>
 
   <!-- VISTA DE FLOTA (DATA GRID) -->
-<div id="fleet-grid-view">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-    <h2 style="font-size:18px">FLOTA // TODOS LOS DISPOSITIVOS</h2>
-    <button class="btn-row" onclick="loadPositions();renderFleetTable()">Actualizar Tabla</button>
+  <div id="fleet-grid-view">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2 style="font-size:18px">FLOTA // TODOS LOS DISPOSITIVOS</h2>
+      <button class="btn-row" onclick="loadPositions();renderFleetTable()">Actualizar Tabla</button>
+    </div>
+    <table class="fleet-table">
+      <thead>
+        <tr>
+          <th>Estado</th>
+          <th>Dispositivo</th>
+          <th>Fuente</th>
+          <th>Latitud / Longitud</th>
+          <th>RSSI</th>
+          <th>Velocidad</th>
+          <th>Temp</th>
+          <th>Última Actualización</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="fleet-grid-body"></tbody>
+    </table>
   </div>
-  <table class="fleet-table">
-    <thead>
-      <tr>
-        <th>Estado</th>
-        <th>Dispositivo</th>
-        <th>Fuente</th>
-        <th>Latitud / Longitud</th>
-        <th>RSSI</th>
-        <th>Velocidad</th>
-        <th>Temp</th>
-        <th>Última Actualización</th>
-        <th>Acciones</th>
-      </tr>
-    </thead>
-    <tbody id="fleet-grid-body"></tbody>
-  </table>
-</div>
+
   <footer class="timeslider" id="time-slider-bar">
     <button class="ts-btn" id="ts-play" onclick="toggleTimePlay()">PLAY</button>
     <input id="ts-range" type="range" min="0" max="0" value="0" aria-label="Linea de tiempo">
@@ -319,24 +279,19 @@ a{color:inherit}
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-// ===== CONFIG =====
 const API = '';
 const HEADERS = {};
 let map, markers = {}, allPositions = [], filteredPositions = [];
 let currentSearch = '', currentSourceFilter = 'all', selectedId = null;
 let timeHistory = [], timeIdx = 0, timePlaying = false, timeTimer = null, timeMarker = null;
 
-// ===== RELOJ Y TIMEAGO =====
 function timeAgo(ts) {
   if (!ts) return 'SIN DATOS';
   const now = Date.now();
   const then = new Date(ts).getTime();
   if (isNaN(then)) return 'FECHA INVÁLIDA';
-  
   const diffSecs = Math.floor((now - then) / 1000);
-
-  if (diffSecs < 0) return 'AHORA MISMO'; // Reloj del PC desfasado
-  if (diffSecs < 60) return 'HACE ' + diffSecs + ' SEG';
+  if (diffSecs < 60) return 'AHORA MISMO';
   const diffMins = Math.floor(diffSecs / 60);
   if (diffMins < 60) return 'HACE ' + diffMins + ' MIN';
   const diffHours = Math.floor(diffMins / 60);
@@ -354,8 +309,7 @@ function tickClock(){
 }
 setInterval(tickClock, 1000); tickClock();
 
-// ===== MAPA =====
-map = L.map('map', {zoomControl:false}).setView([23.6345, -102.5528], 5); // Centro de México por defecto
+map = L.map('map', {zoomControl:false}).setView([23.6345, -102.5528], 5);
 window.NEXUS_MAP = map;
 L.control.zoom({position:'bottomright'}).addTo(map);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'&copy; OpenStreetMap'}).addTo(map);
@@ -367,12 +321,11 @@ const onlineIcon = makeIcon('#22C55E', true);
 const offlineIcon = makeIcon('#94A3B8', false);
 const selectedIcon = makeIcon('#A855F7', true);
 
-// ===== UTILS =====
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function isOnline(p){ try{ return ((new Date() - new Date(p.timestamp))/1000/60) < 15; }catch(e){ return false; } }
+function fmtTime(ts){ try{ return new Date(ts).toLocaleString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit',day:'2-digit',month:'short'}); }catch(e){ return String(ts||'--'); } }
 function fmtCoord(v){ const n = Number(v); return Number.isFinite(n) ? n.toFixed(6) : '--'; }
 
-// ===== FILTROS / BUSQUEDA =====
 function setSourceFilter(f, evt){
   currentSourceFilter = f;
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
@@ -403,7 +356,6 @@ function centerOnFleet(){
   if(bounds.isValid()) map.fitBounds(bounds, {padding:[30,30]});
 }
 
-// ===== LISTA =====
 function renderList(){
   const list = document.getElementById('device-list');
   const total = allPositions.length;
@@ -425,19 +377,18 @@ function renderList(){
   list.innerHTML = filteredPositions.map(p=>{
     const id = p.dispositivo_id || p.mid || '';
     const on = isOnline(p);
-    const vel = p.velocidad ?? p.speed ?? null;
-    const temp = p.temperatura ?? p.temp ?? null;
-    const rssi = p.rssi ?? null;
+    const vel = p.velocidad ?? p.speed ?? 0;
+    const temp = (p.temperatura ?? p.temp ?? '--');
+    const rssi = (p.rssi ?? '--');
     const active = (selectedId===id) ? ' active' : '';
     return '<article class="device-item'+active+'" data-id="'+esc(id)+'" onclick="focusDevice(\''+esc(id)+'\')">'
       + '<div class="dev-top"><div><div class="dev-name">'+esc(p.nombre||id)+'<small>ID: '+esc(id)+' &middot; '+esc((p.fuente||'sms').toUpperCase())+'</small></div></div><span class="badge '+(on?'on':'off')+'">'+(on?'EN LINEA':'FUERA')+'</span></div>'
       + '<div class="dev-coords"><div><span>LATITUD</span>'+fmtCoord(p.lat)+'</div><div><span>LONGITUD</span>'+fmtCoord(p.lon)+'</div><div><span>RSSI</span>'+esc(String(rssi))+' dBm</div></div>'
-      + '<div class="dev-stats"><span>Vel: <b>'+(vel !== null ? esc(String(vel))+' km/h' : 'N/D')+'</b></span><span>Temp: <b>'+(temp !== null ? esc(String(temp))+ (\x27 &deg;C\x27) : 'N/D')+'</b></span><span>'+timeAgo(p.timestamp)+'</span></div>'
+      + '<div class="dev-stats"><span>Vel: <b>'+(vel !== null ? esc(String(vel))+' km/h' : 'N/D')+'</b></span><span>Temp: <b>'+(temp !== null ? esc(String(temp))+' &deg;C' : 'N/D')+'</b></span><span>'+timeAgo(p.timestamp)+'</span></div>'
       + '</article>';
   }).join('');
 }
 
-// ===== MAPA =====
 function updateMap(){
   filteredPositions.forEach(p=>{
     const id = p.dispositivo_id || p.mid; if(!id) return;
@@ -452,7 +403,6 @@ function updateMap(){
     }
   });
   
-  // Limpiar marcadores que ya no están en la lista filtrada
   Object.keys(markers).forEach(id=>{
     if(!filteredPositions.some(p=>(p.dispositivo_id||p.mid)===id)){ 
         map.removeLayer(markers[id]); 
@@ -461,7 +411,6 @@ function updateMap(){
   });
 }
 
-// ===== DETALLE =====
 function focusDevice(id){
   const p = allPositions.find(x=>(x.dispositivo_id||x.mid)===id); if(!p) return;
   selectedId = id;
@@ -474,15 +423,15 @@ function focusDevice(id){
   const on = isOnline(p);
   document.getElementById('info-status').innerHTML = '<span class="pill '+(on?'on':'off')+'">'+(on?'EN LINEA':'FUERA DE LINEA')+'</span><span class="pill neutral">Ult. actualizacion: '+timeAgo(p.timestamp)+'</span>';
   const vel = p.velocidad ?? p.speed ?? null;
-  const temp = p.temperatura ?? p.temp ?? '--';
-  const rssi = p.rssi ?? '--';
+  const temp = p.temperatura ?? p.temp ?? null;
+  const rssi = p.rssi ?? null;
   document.getElementById('info-data').innerHTML =
     '<div><div class="section-label">UBICACION EN VIVO</div><div class="stat-grid" style="margin-top:8px">'
     + '<div class="stat-box cyan"><label>LATITUD</label><b>'+fmtCoord(p.lat)+'</b><span>Grados decimales</span></div>'
     + '<div class="stat-box cyan"><label>LONGITUD</label><b>'+fmtCoord(p.lon)+'</b><span>Grados decimales</span></div>'
     + '<div class="stat-box"><label>VELOCIDAD</label><b>'+(vel !== null ? esc(String(vel))+' km/h' : 'SIN DATO')+'</b><span>Instantanea</span></div>'
-    + '<div class="stat-box"><label>TEMPERATURA</label><b>'+(temp !== null ? esc(String(temp))+ (\x27 &deg;C\x27) : 'N/D')+'</b><span>Sensor</span></div>'
-    + '<div class="stat-box"><label>SENAL (RSSI)</label><b>'+esc(String(rssi))+' dBm</b><span>Intensidad</span></div>'
+    + '<div class="stat-box"><label>TEMPERATURA</label><b>'+(temp !== null ? esc(String(temp))+' &deg;C' : 'N/D')+'</b><span>Sensor</span></div>'
+    + '<div class="stat-box"><label>SENAL (RSSI)</label><b>'+(rssi !== null ? esc(String(rssi))+' dBm' : 'N/D')+'</b><span>Intensidad</span></div>'
     + '<div class="stat-box"><label>ESTADO</label><b style="color:'+(on?'#22C55E':'#F43F5E')+'">'+(on?'EN LINEA':'FUERA')+'</b><span>Ult. 15 min</span></div>'
     + '</div></div>'
     + '<div><div class="section-label">ACCIONES</div><div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">'
@@ -492,7 +441,7 @@ function focusDevice(id){
     + '</div></div>'
     + '<div><div class="section-label">ACTIVIDAD RECIENTE</div><div class="timeline" style="margin-top:10px">'
     + '<div class="timeline-item"><b>Posicion actualizada</b><span>'+timeAgo(p.timestamp)+' — Lat '+fmtCoord(p.lat)+', Lon '+fmtCoord(p.lon)+'</span></div>'
-    + '<div class="timeline-item"><b>Sincronizado con el servidor</b><span>Canal: '+esc(String(p.fuente||'sms').toUpperCase())+' · RSSI '+esc(String(rssi))+' dBm</span></div>'
+    + '<div class="timeline-item"><b>Sincronizado con el servidor</b><span>Canal: '+esc(String(p.fuente||'sms').toUpperCase())+' · RSSI '+(rssi !== null ? esc(String(rssi))+' dBm' : 'N/D')+'</span></div>'
     + '<div class="timeline-item"><b>Listo para reproducir recorrido</b><span>Usa el Time Slider inferior y pulsa PLAY</span></div>'
     + '</div></div>'
     + '<div class="note">Si el dispositivo no responde, pulsa SOLICITAR ESTATUS REAL. El servidor enviara la orden y la unidad reportara en su siguiente ciclo.</div>';
@@ -503,20 +452,16 @@ function focusDevice(id){
 async function requestGpsUpdate(id){
   const p = allPositions.find(x => (x.dispositivo_id || x.mid) === id);
   const nombre = p ? (p.nombre || id) : id;
-  
-  // El backend ahora acepta el ESN o el Alias, pero mandamos el alias si es posible
-  const targetId = (p && p.nombre && p.nombre !== id) ? p.nombre : id;
-
-  try {
+  try{
     const res = await fetch('/api/ntfy/send-sms', {
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':'RF-NEXUS-SECURE-2026'},
-      body: JSON.stringify({ deviceId: targetId, command: '!R5' })
+      body: JSON.stringify({ deviceId: id, command: '!R5' })
     });
     const data = await res.json().catch(()=>({}));
-    if(res.ok) showAlert('Orden ntfy enviada para: ' + nombre, true);
-    else showAlert('Error backend: ' + (data.error || res.status));
-  } catch(e) { showAlert('Error de red al contactar backend'); }
+    if(res.ok) showAlert('Orden ntfy enviada para: '+nombre, true);
+    else showAlert('Error backend: '+(data.error || res.status));
+  }catch(e){ showAlert('Error de red al contactar backend'); }
 }
 
 function showAlert(msg, ok){
@@ -528,7 +473,6 @@ function showAlert(msg, ok){
   setTimeout(()=>{ if(box.parentNode) box.parentNode.removeChild(box); }, 6000);
 }
 
-// ===== CARGA =====
 let lastSyncTime = Date.now();
 
 async function loadPositions() {
@@ -546,18 +490,10 @@ async function loadPositions() {
       if (hubRes.ok) {
         const h = await hubRes.json();
         hubbleData = h.filter(d => d.lat !== null && d.lon !== null).map(d => ({
-          dispositivo_id: d.device_id,
-          nombre: d.name,
-          lat: d.lat,
-          lon: d.lon,
-          velocidad: 0,
-          temperatura: null,
-          fuente: 'hubble',
+          dispositivo_id: d.device_id, nombre: d.name, lat: d.lat, lon: d.lon,
+          velocidad: 0, temperatura: null, fuente: 'hubble',
           timestamp: new Date(d.last_packet_ts * 1000).toISOString(),
-          is_online: d.is_online,
-          _hubble: true,
-          _packet_count: d.packet_count,
-          _network: d.network
+          is_online: d.is_online, _hubble: true, _packet_count: d.packet_count, _network: d.network
         }));
       }
     } catch (e) { console.warn('Hubble fetch failed', e); }
@@ -569,7 +505,6 @@ async function loadPositions() {
     document.getElementById('api-status').textContent = 'EN LINEA';
     document.getElementById('api-status').style.color = '#86EFAC';
     
-    // Actualizar leyenda dinámica
     const attrib = document.getElementById('map-attrib');
     if (attrib) {
         attrib.textContent = allPositions.length > 0 
@@ -579,12 +514,7 @@ async function loadPositions() {
 
     try { if (typeof filterList === 'function') filterList(); } catch(errMap) { console.warn('Error renderizando mapa:', errMap); }
     
-    // Auto-zoom en el primer load si hay datos
-    if (!window._hasCentered && allPositions.length > 0) {
-        centerOnFleet();
-        window._hasCentered = true;
-    }
-
+    if (!window._hasCentered && allPositions.length > 0) { centerOnFleet(); window._hasCentered = true; }
     if (selectedId) {
       const p = allPositions.find(x => (x.dispositivo_id || x.mid) === selectedId);
       if (p) focusDevice(selectedId);
@@ -595,31 +525,13 @@ async function loadPositions() {
   }
 }
 
-setInterval(() => {
-  const el = document.getElementById('sync-indicator');
-  if (el) {
-    const secs = Math.floor((Date.now() - lastSyncTime) / 1000);
-    el.textContent = secs < 5 ? '● sync OK' : '● hace '+secs+'s';
-    el.style.color = secs < 10 ? '#86EFAC' : secs < 30 ? '#FCD34D' : '#FDA4AF';
-  }
-}, 1000);
-
-// ===== TIME SLIDER =====
 async function loadTimeHistory(deviceId){
   const info = document.getElementById('ts-info');
   try{
     let device = deviceId || selectedId || '';
-    if(!device){
-      try{
-        const r = await fetch('/api/posiciones/latest'); const j = await r.json();
-        if(Array.isArray(j) && j.length) device = j[0].dispositivo_id || j[0].device || '';
-      }catch(e){}
-    }
     const qs = device ? '?device='+encodeURIComponent(device)+'&limit=200' : '?limit=200';
     const r = await fetch('/api/posiciones/history'+qs);
     const j = await r.json();
-    
-    // EVITAR RACE CONDITION: Si el usuario ya cambió de dispositivo, ignorar esta respuesta
     if (deviceId && selectedId && deviceId !== selectedId) return;
 
     timeHistory = Array.isArray(j) ? j.slice().reverse() : [];
@@ -633,12 +545,13 @@ async function loadTimeHistory(deviceId){
     } else if(info) info.textContent = 'Sin historial para '+ (device||'esta unidad');
   }catch(e){ if(info) info.textContent = 'No se pudo cargar el historial'; }
 }
+
 function showTimePoint(i){
   if(!timeHistory.length) return;
   const p = timeHistory[i];
   const lat = Number(p.lat), lon = Number(p.lon);
   const info = document.getElementById('ts-info');
-  if(info) info.textContent = (p.timestamp||p.ts||'')+'  ·  '+ (p.dispositivo_id||p.device||'') +'  ·  Lat '+lat.toFixed(5)+' Lon '+lon.toFixed(5)+'  ·  RSSI '+ (p.rssi ?? '--') +' dBm  ·  '+(i+1)+'/'+timeHistory.length;
+  if(info) info.textContent = (p.timestamp||p.ts||'')+'  ·  '+ (p.dispositivo_id||p.device||'') +'  ·  Lat '+lat.toFixed(5)+' Lon '+lon.toFixed(5)+'  ·  '+(i+1)+'/'+timeHistory.length;
   if(window.NEXUS_MAP && window.L){
     if(!timeMarker){ timeMarker = L.marker([lat,lon],{icon:selectedIcon}).addTo(window.NEXUS_MAP); }
     else timeMarker.setLatLng([lat,lon]);
@@ -710,24 +623,17 @@ function renderFleetTable() {
     tb.innerHTML = html;
 }
 
-// ===== INIT =====
 loadPositions();
 setInterval(loadPositions, 5000);
-loadTimeHistory();
-
+</script>
+<script src="/ws-client.js"></script>
+<script src="/time-slider.js"></script>
+<script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function(){
     navigator.serviceWorker.register('/sw.js').then(function(reg){ console.log('[PWA] SW registrado', reg.scope); }).catch(function(err){ console.log('[PWA] SW fallo', err); });
   });
 }
 </script>
-
 </body>
 </html>
-
-
-
-
-
-
-
