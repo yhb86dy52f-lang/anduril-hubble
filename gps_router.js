@@ -1,20 +1,11 @@
 const { insertGpsPosition } = require('./db');
 const { checkGeofences } = require('./geofence');
-const { savePosition } = require('./history');
-const { broadcast } = require('./ws-broadcast');
 
-function isValidLat(lat) {
-  return typeof lat === 'number' && Number.isFinite(lat) && lat >= -90 && lat <= 90;
-}
-function isValidLon(lon) {
-  return typeof lon === 'number' && Number.isFinite(lon) && lon >= -180 && lon <= 180;
-}
-function isValidRssi(rssi) {
-  return rssi === undefined || rssi === null || (Number.isInteger(rssi) && rssi >= -120 && rssi <= 0);
-}
+function isValidLat(lat) { return typeof lat === 'number' && Number.isFinite(lat) && lat >= -90 && lat <= 90; }
+function isValidLon(lon) { return typeof lon === 'number' && Number.isFinite(lon) && lon >= -180 && lon <= 180; }
+function isValidRssi(rssi) { return rssi === undefined || rssi === null || (Number.isInteger(rssi) && rssi >= -120 && rssi <= 0); }
 
 async function gpsRoutes(fastify, options) {
-  // POST /api/gps/update
   fastify.post('/api/gps/update', async (request, reply) => {
     const body = request.body || {};
     const device = typeof body.device === 'string' ? body.device.trim().slice(0, 64) : '';
@@ -23,95 +14,66 @@ async function gpsRoutes(fastify, options) {
     const rssi = body.rssi !== undefined ? Number(body.rssi) : null;
 
     if (!device) return reply.status(400).send({ error: 'Falta device' });
-    if (!isValidLat(lat)) return reply.status(400).send({ error: 'lat fuera de rango -90 a 90' });
-    if (!isValidLon(lon)) return reply.status(400).send({ error: 'lon fuera de rango -180 a 180' });
-    if (!isValidRssi(rssi)) return reply.status(400).send({ error: 'rssi fuera de rango -120 a 0' });
-
+    if (!isValidLat(lat)) return reply.status(400).send({ error: 'lat fuera de rango' });
+    if (!isValidLon(lon)) return reply.status(400).send({ error: 'lon fuera de rango' });
+    
+    const eventos = checkGeofences(device, lat, lon);
+    for (const e of eventos) { fastify.log.info(`[GEOCERCAS] ${e.deviceId} ${e.tipo} ${e.nombre}`); }
+    
     try {
-      // Guardar en DB principal
       const row = insertGpsPosition({
-        device,
-        mac: typeof body.mac === 'string' ? body.mac.slice(0, 32) : null,
-        rssi,
-        lat, lon,
+        device, mac: typeof body.mac === 'string' ? body.mac.slice(0, 32) : null, rssi, lat, lon,
         velocidad: Number(body.velocidad) || 0,
         temperatura: body.temperatura !== undefined ? Number(body.temperatura) : null,
         fuente: typeof body.fuente === 'string' ? body.fuente.slice(0, 20) : 'sms',
       });
-
-      // Guardar en historial (Time Slider)
-      try { savePosition(device, lat, lon, rssi); } catch(e) {}
-
-      // Lógica de Geocercas
-      const eventos = checkGeofences(device, lat, lon);
-      const NTFY_TOPIC = process.env.NTFY_TOPIC;
-      for (const e of eventos) {
-        fastify.log.info(`[GEOCERCAS] ${e.deviceId} ${e.tipo} ${e.nombre}`);
-        
-        // ALERTA PUSH VIA NTFY
-        if (NTFY_TOPIC) {
-          const msg = `🚨 GEOCERCA: ${e.deviceId} ${e.tipo} ${e.nombre}`;
-          fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
-            method: 'POST',
-            body: msg,
-            headers: { 'Title': 'NEXUS-SENTINEL', 'Priority': 'high', 'Tags': 'warning' }
-          }).catch(err => fastify.log.error('Error NTFY:', err));
-        }
-      }
-
-      // ALERTA DE SEÑAL CRÍTICA
-      if (NTFY_TOPIC && rssi !== null && rssi < -95) {
-        const msg = `⚠️ SEÑAL CRÍTICA: ${device} tiene RSSI ${rssi} dBm`;
-        fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
-          method: 'POST',
-          body: msg,
-          headers: { 'Title': 'NEXUS-SENTINEL', 'Priority': 'urgent', 'Tags': 'rotating_light' }
-        }).catch(err => fastify.log.error('Error NTFY:', err));
-      }
-
-      // Emitir por WebSocket
-      broadcast({ type: 'posicion', deviceId: device, lat, lon, rssi, eventos, ts: Date.now() });
-      if (eventos.length > 0) broadcast({ type: 'geocerca', eventos, ts: Date.now() });
-
-      return reply.send({ status: 'OK', id: row.lastInsertRowid, eventos });
+      return reply.send({ status: 'OK', id: row.lastInsertRowid });
     } catch (err) {
       fastify.log.error(err);
       return reply.status(500).send({ error: 'Error en BD' });
     }
   });
 
-  // POST /api/sms-gps
   fastify.post('/api/sms-gps', async (request, reply) => {
     const body = request.body || {};
-    
-    // Parsear texto de SMS si viene en formato crudo
-    if (typeof body.texto === 'string') {
-      const m = body.texto.match(/(-?\d+\.\d+)\s*[,;\s]\s*(-?\d+\.\d+)/);
-      if (!m) return reply.status(400).send({ error: 'No se pudo parsear texto SMS' });
-      request.body = { device: body.device || 'sms-unknown', lat: Number(m[1]), lon: Number(m[2]), fuente: 'sms' };
+    const texto = typeof body.texto === 'string' ? body.texto : '';
+    let device = body.device || body.deviceId || 'sms-unknown';
+    let lat = null, lon = null, rssi = null;
+
+    if (texto) {
+      const midMatch = texto.match(/MID:\s*(\d+)/i) || texto.match(/ESN:\s*(\d+)/i);
+      if (midMatch) device = midMatch[1];
+
+      const latLonMatch = texto.match(/LAT:\s*([-]?\d+\.\d+)\s*LON:\s*([-]?\d+\.\d+)/i) || texto.match(/([-]?\d{2,3}\.\d+)\s*[,;\s]\s*([-]?\d{2,3}\.\d+)/);
+      if (latLonMatch) { lat = parseFloat(latLonMatch[1]); lon = parseFloat(latLonMatch[2]); }
+      
+      const comMatch = texto.match(/COM:\s*(-?\d+)/i);
+      if (comMatch) rssi = parseInt(comMatch[1], 10);
     }
 
-    if (body.lat !== undefined || body.texto) {
-      const device = typeof (body.device || body.deviceId || 'sms-unknown') === 'string' ? String(body.device || body.deviceId || 'sms-unknown').slice(0, 64) : 'sms-unknown';
-      const lat = body.lat !== undefined ? Number(body.lat) : Number(body.texto ? body.texto.match(/(-?\d+\.\d+)/)[1] : NaN);
-      const lon = body.lon !== undefined ? Number(body.lon) : NaN;
-      
-      if (!isValidLat(lat) || !isValidLon(lon)) return reply.status(400).send({ error: 'Coordenadas invalidas en SMS' });
-      
-      // Guardar en DB principal
-      const row = insertGpsPosition({ device, lat, lon, fuente: 'sms' });
-      
-      // Guardar en historial
-      try { savePosition(device, lat, lon, null); } catch(e) {}
-      
-      // Emitir por WebSocket (opcional, para que el frontend se actualice)
-      broadcast({ type: 'posicion', deviceId: device, lat, lon, ts: Date.now() });
-      
-      return reply.send({ status: 'OK', id: row.lastInsertRowid });
+    if (body.lat !== undefined && body.lon !== undefined) {
+      lat = Number(body.lat); lon = Number(body.lon);
     }
-    return reply.status(400).send({ error: 'Faltan datos' });
+
+    if (lat !== null && lon !== null) {
+      if (!isValidLat(lat) || !isValidLon(lon)) return reply.status(400).send({ error: 'Coordenadas invalidas' });
+      
+      const eventos = checkGeofences(device, lat, lon);
+      for (const e of eventos) { fastify.log.info(`[GEOCERCAS] ${e.deviceId} ${e.tipo} ${e.nombre}`); }
+
+      try {
+        const row = insertGpsPosition({ device, lat, lon, rssi: isValidRssi(rssi) ? rssi : null, velocidad: 0, fuente: 'sms' });
+        fastify.log.info(`[SMS GPS] Ubicación guardada para ${device} (Lat: ${lat}, Lon: ${lon})`);
+        return reply.send({ status: 'OK', message: 'SMS procesado', id: row.lastInsertRowid, device, lat, lon });
+      } catch (err) {
+        fastify.log.error(err);
+        return reply.status(500).send({ error: 'Error en BD' });
+      }
+    } 
+    
+    fastify.log.info(`[SMS GPS] Estatus recibido de ${device} (sin coordenadas)`);
+    return reply.send({ status: 'OK', message: 'SMS de estatus recibido' });
   });
 }
 
-module.exports = { isValidLat, isValidLon, isValidRssi, gpsRoutes };
-
+module.exports = gpsRoutes;

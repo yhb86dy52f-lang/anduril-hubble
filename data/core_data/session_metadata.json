@@ -1,0 +1,36 @@
+{
+  "session_info": {
+    "project": "RUNEFORGE V2.6.2",
+    "timestamp_extracted": "2026-10-27T04:38:00",
+    "operator": "Nestor (RUNEFORGE-PC)",
+    "environment": "Windows 10 Pro (22H2)"
+  },
+  "visible_paths": [
+    "C:\\RUNEFORGE_V2_CORE\\whisper-backend\\venv\\Scripts\\python.exe",
+    "C:\\RUNEFORGE_V2_CORE\\whisper-backend",
+    "C:\\RUNEFORGE_V2_CORE\\nexus-tactical",
+    "C:\\RUNEFORGE_V2_CORE\\nexus-tactical\\src-tauri",
+    "C:\\RUNEFORGE_V2_CORE\\target\\debug\\app.exe"
+  ],
+  "status_indicators": {
+    "fastify_backend": "ONLINE (Puerto 3100)",
+    "whisper_ai": "ONLINE (Puerto 8081, Cargado en CUDA)",
+    "ollama_llm": "ONLINE",
+    "tauri_frontend": "CONECTADO A FASTIFY",
+    "tailscale_funnel": "ONLINE (HTTPS Público)"
+  },
+  "hardware_metrics": {
+    "cpu_usage_percent": 31,
+    "cpu_cores": 4,
+    "ram_used_gb": 6.77,
+    "ram_total_gb": 15.93,
+    "ram_usage_percent": 42,
+    "uptime": "0h 51m"
+  },
+  "active_processes_observed": [
+    "Python (Whisper Uvicorn en 127.0.0.1:8000)",
+    "Node.js (Vite / Rollup en 127.0.0.1:8000)",
+    "Cargo / Rust (Compilación Tauri)",
+    "AutoHotkey (RUNEFORGE COMMAND CENTER V22.3)"
+  ]
+}

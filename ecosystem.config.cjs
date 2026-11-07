@@ -1,12 +1,14 @@
 module.exports = {
-  apps: [
-    { 
-      name: "runeforge-backend", 
-      script: "./server.js", 
-      cwd: "C:/RUNEFORGE_V2_CORE", 
-      instances: 1, 
-      exec_mode: "fork", 
-      env: { PORT: 3001, NODE_ENV: "production" } 
+  apps: [{
+    name: 'anduril-hubble',
+    script: 'server.js',
+    instances: 1,
+    autorestart: true,
+    watch: false,
+    max_memory_restart: '1G',
+    env: {
+      NODE_ENV: 'production',
+      PORT: 3100
     }
-  ]
-}
+  }]
+};
